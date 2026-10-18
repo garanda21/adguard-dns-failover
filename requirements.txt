@@ -1,0 +1,2 @@
+requests==2.32.3
+croniter==3.0.3

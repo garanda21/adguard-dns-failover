@@ -1,0 +1,10 @@
+services:
+  adguard-dns-failover:
+    image: garanda21/adguard-dns-failover:latest
+    # To build locally instead, uncomment:
+    # build: .
+    container_name: adguard-dns-failover
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
