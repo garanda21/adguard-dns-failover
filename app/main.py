@@ -97,11 +97,13 @@ def restore(cfg: Config, inst: Instance, store: BackupStore) -> bool:
 
 def run_once(cfg: Config, store: BackupStore, notifier: TelegramNotifier | None = None) -> int:
     try:
-        status = detector.check(cfg.api_url, cfg.block_threshold_pct, cfg.block_min_ips, cfg.http_timeout)
+        status = detector.check(cfg.api_url, cfg.block_threshold_pct, cfg.block_min_ips, cfg.http_timeout, cfg.isps)
     except Exception as exc:  # noqa: BLE001
         log.error("Block check failed, leaving DNS untouched: %s", exc)
         return 1
 
+    if status.unknown_isps:
+        log.warning("ISPS not found in data (ignored): %s", ", ".join(status.unknown_isps))
     summary = ", ".join(f"{s.isp} {s.blocked}/{s.total} ({s.pct:.0f}%)" for s in status.isps)
     log.info("Block active: %s | threshold %d IPs or %.0f%% | %s | data %s",
              status.active, cfg.block_min_ips, cfg.block_threshold_pct, summary, status.last_update)
@@ -140,6 +142,7 @@ def loop(cfg: Config, store: BackupStore) -> None:
     log.info("adguard-dns-failover %s", os.environ.get("APP_VERSION", "dev"))
     log.info("Instances: %s", ", ".join(i.name for i in cfg.instances))
     log.info("Schedules: %s", " | ".join(cfg.cron_schedules))
+    log.info("ISPs checked: %s", ", ".join(cfg.isps) if cfg.isps else "all")
     notifier = make_notifier(cfg)
     log.info("Telegram notifications: %s", "enabled" if notifier.enabled else "disabled")
     if cfg.run_on_start:
@@ -159,7 +162,7 @@ def make_notifier(cfg: Config) -> TelegramNotifier:
 
 def status_cmd(cfg: Config, store: BackupStore) -> int:
     try:
-        st = detector.check(cfg.api_url, cfg.block_threshold_pct, cfg.block_min_ips, cfg.http_timeout)
+        st = detector.check(cfg.api_url, cfg.block_threshold_pct, cfg.block_min_ips, cfg.http_timeout, cfg.isps)
         print(f"Block active: {st.active} (data {st.last_update})")
         for s in st.isps:
             print(f"  {s.isp:<12} {s.blocked}/{s.total} ({s.pct:.0f}%)")

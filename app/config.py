@@ -42,6 +42,7 @@ class Config:
     api_url: str = DEFAULT_API_URL
     block_threshold_pct: float = 50.0
     block_min_ips: int = 20
+    isps: list[str] = field(default_factory=list)
     block_upstreams: list[str] = field(default_factory=list)
     block_bootstrap: list[str] = field(default_factory=list)
     block_fallback: list[str] = field(default_factory=list)
@@ -124,6 +125,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         api_url=env.get("API_URL") or DEFAULT_API_URL,
         block_threshold_pct=float(env.get("BLOCK_THRESHOLD_PCT") or 50),
         block_min_ips=int(env.get("BLOCK_MIN_IPS") or 20),
+        isps=[i.strip() for i in re.split(r"[,;\n]", env.get("ISPS") or "") if i.strip()],
         block_upstreams=upstreams,
         block_bootstrap=split_list(env.get("BLOCK_BOOTSTRAP", DEFAULT_BLOCK_BOOTSTRAP)),
         # Defaults to the block upstreams; set BLOCK_FALLBACK=none to leave fallback untouched.

@@ -81,6 +81,17 @@ Prueba la conexión con `docker compose exec adguard-dns-failover python -m app 
 
 Solo se envía mensaje cuando cambia el estado (empieza o acaba el bloqueo) o si alguna instancia falla al cambiar.
 
+### Operadores
+
+Por defecto se tienen en cuenta todos los operadores (DIGI, Masmovil, Movistar, Orange, Vodafone). Si solo te interesa el tuyo, indícalo para que un bloqueo en otro operador no cambie tus DNS:
+
+```env
+ISPS=movistar
+# o varios: ISPS=movistar,digi
+```
+
+Si escribes un operador que no aparece en los datos, se muestra un aviso en el log y se ignora.
+
 ### DNS durante el bloqueo
 
 Por defecto se usa xdp.es, pero puedes poner cualquier DNS que admita AdGuard Home (DoH, DoT, DoQ o IP):
@@ -105,6 +116,7 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 | `RUN_ON_START` | `true` | Comprobar al arrancar el contenedor |
 | `TZ` | `Europe/Madrid` | Zona horaria de los cron |
 | `BLOCK_MIN_IPS` | `20` | Nº de IPs bloqueadas en un operador para considerar bloqueo |
+| `ISPS` | (todos) | Operadores a vigilar, separados por comas (`movistar,digi`). No distingue mayúsculas. Vacío = todos |
 | `BLOCK_THRESHOLD_PCT` | `50` | % de IPs bloqueadas en un operador para considerar bloqueo |
 | `API_URL` | `https://hayahora.futbol/estado/data.json` | Fuente de datos |
 | `BLOCK_UPSTREAMS` | `https://dns.xdp.es/dns-query;tls://dns.xdp.es` | Upstreams durante el bloqueo |

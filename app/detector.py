@@ -11,7 +11,7 @@ ISP: outside matches 0-6 are blocked, during a block 150-900 (only ~4-10%).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import requests
 
@@ -34,9 +34,13 @@ class BlockStatus:
     active: bool
     isps: list[IspStatus]
     last_update: str | None
+    # Requested ISPs (ISPS filter) that are not present in the data.
+    unknown_isps: list[str] = field(default_factory=list)
 
 
-def evaluate(payload: dict, threshold_pct: float, min_ips: int = 0) -> BlockStatus:
+def evaluate(payload: dict, threshold_pct: float, min_ips: int = 0,
+             isps_filter: list[str] | None = None) -> BlockStatus:
+    """Evaluate the payload; ``isps_filter`` limits the check to those ISPs (case-insensitive)."""
     entries = payload.get("data")
     if not isinstance(entries, list):
         raise ValueError("Unexpected payload: missing 'data' list")
@@ -53,11 +57,18 @@ def evaluate(payload: dict, threshold_pct: float, min_ips: int = 0) -> BlockStat
         status.blocked += int(blocked)
 
     isps = sorted(per_isp.values(), key=lambda s: s.isp)
+    unknown: list[str] = []
+    if isps_filter:
+        wanted = {name.strip().lower() for name in isps_filter if name.strip()}
+        known = {s.isp.lower() for s in isps}
+        unknown = sorted(name for name in wanted if name not in known)
+        isps = [s for s in isps if s.isp.lower() in wanted]
     active = any(s.pct >= threshold_pct or (min_ips > 0 and s.blocked >= min_ips) for s in isps)
-    return BlockStatus(active=active, isps=isps, last_update=payload.get("lastUpdate"))
+    return BlockStatus(active=active, isps=isps, last_update=payload.get("lastUpdate"), unknown_isps=unknown)
 
 
-def check(api_url: str, threshold_pct: float, min_ips: int = 0, timeout: float = 15.0) -> BlockStatus:
+def check(api_url: str, threshold_pct: float, min_ips: int = 0, timeout: float = 15.0,
+          isps_filter: list[str] | None = None) -> BlockStatus:
     resp = requests.get(api_url, timeout=timeout, headers={"User-Agent": "adguard-dns-failover"})
     resp.raise_for_status()
-    return evaluate(resp.json(), threshold_pct, min_ips)
+    return evaluate(resp.json(), threshold_pct, min_ips, isps_filter)

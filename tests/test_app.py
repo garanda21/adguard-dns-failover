@@ -174,3 +174,19 @@ def test_is_block_dns_active_detects_manual_setup(tmp_path):
     assert not m.is_block_dns_active(cfg, {"upstream_dns": ["https://dns.xdp.es/dns-query", "1.1.1.1"]})
     assert not m.is_block_dns_active(cfg, {"upstream_dns": ["https://dns10.quad9.net/dns-query"]})
     assert not m.is_block_dns_active(cfg, {"upstream_dns": []})
+
+
+def test_isps_filter():
+    data = [{"isp": "DIGI", "stateChanges": [{"state": True}]}] * 30
+    data += [{"isp": "Movistar", "stateChanges": [{"state": False}]}] * 30
+    payload = {"data": data}
+    assert evaluate(payload, 50, 20).active is True
+    st = evaluate(payload, 50, 20, ["movistar"])
+    assert st.active is False and [s.isp for s in st.isps] == ["Movistar"]
+    assert evaluate(payload, 50, 20, ["Movistar", " digi "]).active is True
+    assert evaluate(payload, 50, 20, ["movistar", "jazztel"]).unknown_isps == ["jazztel"]
+
+
+def test_isps_config(tmp_path):
+    assert load_config(env(tmp_path)).isps == []
+    assert load_config(env(tmp_path, ISPS="movistar, Orange;digi")).isps == ["movistar", "Orange", "digi"]
