@@ -285,3 +285,15 @@ def test_mixed_instances_config(tmp_path):
     cfg = load_config(env(tmp_path, PIHOLE_1_URL=PH, BLOCK_PIHOLE_UPSTREAMS="9.9.9.9#53"))
     assert [(i.kind, i.key) for i in cfg.instances] == [("adguard", "1"), ("pihole", "pihole_1")]
     assert cfg.block_pihole_upstreams == ["9.9.9.9#53"]
+
+
+def test_message_when_every_instance_failed():
+    from app.detector import BlockStatus, IspStatus
+    from app.notifier import build_message
+
+    st = BlockStatus(True, [IspStatus("DIGI", 10, 5)], "x")
+    msg = build_message(True, st, [], ["NAS"], ["1.2.3.4"])
+    assert "No se ha podido cambiar" in msg and "restablecida" not in msg and "AdGuard" not in msg
+    ok = build_message(True, st, ["NAS"], [], ["1.2.3.4"])
+    assert "Tus servidores DNS han cambiado" in ok and "restablecida" in ok
+    assert "No se han podido restaurar" in build_message(False, st, [], ["NAS"], [])

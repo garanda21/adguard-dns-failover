@@ -28,28 +28,25 @@ def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: lis
                   upstreams: list[str]) -> str:
     now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
     if blocked:
-        parts = [
-            "🚨🛡️ <b>¡Bloqueo de IPs detectado!</b> 🛡️🚨",
-            "",
-            "🛡️ AdGuard Home ha cambiado a los DNS alternativos para esquivar el bloqueo.",
-            "",
-            "📡 <b>Estado por operador:</b>",
-            _isp_lines(status),
-        ]
+        parts = ["🚨🛡️ <b>¡Bloqueo de IPs detectado!</b> 🛡️🚨", ""]
+        if ok:
+            parts.append("🛡️ Tus servidores DNS han cambiado a los DNS alternativos para esquivar el bloqueo.")
+        else:
+            parts.append("⚠️ <b>No se ha podido cambiar ningún servidor DNS.</b> Revisa los logs.")
+        parts += ["", "📡 <b>Estado por operador:</b>", _isp_lines(status)]
         if ok:
             parts += ["", "✅ <b>Instancias actualizadas:</b>", _instance_lines(ok, "🔀")]
-        if upstreams:
-            parts += ["", "🌐 <b>Upstreams:</b>", "\n".join(f"<code>{html.escape(u)}</code>" for u in upstreams)]
-        parts += ["", "🧹 Caché DNS limpiada. ¡Navegación restablecida! 🚀"]
+            if upstreams:
+                parts += ["", "🌐 <b>Upstreams:</b>", "\n".join(f"<code>{html.escape(u)}</code>" for u in upstreams)]
+            parts += ["", "🧹 Caché DNS limpiada. ¡Navegación restablecida! 🚀"]
     else:
-        parts = [
-            "🎉🟢 <b>Fin del bloqueo de IPs</b> 🟢🎉",
-            "",
-            "🔙 Se han restaurado los DNS originales en AdGuard Home.",
-        ]
+        parts = ["🎉🟢 <b>Fin del bloqueo de IPs</b> 🟢🎉", ""]
         if ok:
-            parts += ["", "✅ <b>Instancias restauradas:</b>", _instance_lines(ok, "♻️")]
-        parts += ["", "🧹 Caché DNS limpiada. Todo vuelve a la normalidad 😎"]
+            parts += ["🔙 Se han restaurado los DNS originales.",
+                      "", "✅ <b>Instancias restauradas:</b>", _instance_lines(ok, "♻️"),
+                      "", "🧹 Caché DNS limpiada. Todo vuelve a la normalidad 😎"]
+        else:
+            parts.append("⚠️ <b>No se han podido restaurar los DNS originales.</b> Revisa los logs.")
     if failed:
         parts += ["", "⚠️ <b>Errores en:</b>", _instance_lines(failed, "❌")]
     parts += ["", f"🕒 {now}"]
