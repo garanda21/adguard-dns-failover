@@ -41,7 +41,11 @@ class PiHoleClient:
         except requests.RequestException as exc:
             raise PiHoleError(f"{method} {url} failed: {exc}") from exc
         if resp.status_code >= 400:
-            raise PiHoleError(f"{method} {url} -> HTTP {resp.status_code}: {resp.text.strip()[:200]}")
+            detail = resp.text.strip()[:300]
+            if "app_sudo" in detail:
+                detail = ("app passwords cannot change settings: enable webserver.api.app_sudo in Pi-hole "
+                          "(Settings > All settings > Webserver and API) or use the main password")
+            raise PiHoleError(f"{method} {url} -> HTTP {resp.status_code}: {detail}")
         return resp
 
     def login(self) -> None:

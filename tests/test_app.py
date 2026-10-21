@@ -262,6 +262,18 @@ def test_pihole_read_only_upstreams(tmp_path):
 
 
 @responses.activate
+def test_pihole_app_sudo_forbidden_discards_backup(tmp_path):
+    cfg = load_config(pihole_env(tmp_path))
+    store = BackupStore(cfg.data_dir)
+    pihole_mock({"upstreams": ["8.8.8.8"]})
+    responses.replace(responses.PATCH, f"{PH}/api/config", status=403, json={"error": {
+        "key": "forbidden", "hint": "(webserver.api.app_sudo is false)"}})
+    responses.add(responses.GET, API, json=payload(4))
+    assert m.run_once(cfg, store) == 1
+    assert store.get("pihole_1") is None
+
+
+@responses.activate
 def test_pihole_bad_password(tmp_path):
     cfg = load_config(pihole_env(tmp_path))
     responses.add(responses.POST, f"{PH}/api/auth", status=401, json={"session": {"valid": False}})

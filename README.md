@@ -65,7 +65,8 @@ PIHOLE_1_NAME=Pi-hole NAS
 PIHOLE_1_PASSWORD=app-password
 ```
 
-- **Contraseña:** usa una *app password* (en Pi-hole: Ajustes → Web interface / API → *Configure app password*). Si tu Pi-hole no tiene contraseña, déjala vacía.
+- **Contraseña:** usa una *app password* (en Pi-hole: Settings → Web interface / API → *Configure app password*). Si tu Pi-hole no tiene contraseña, déjala vacía.
+- **Permiso para cambiar la configuración:** por defecto, las *app passwords* no pueden modificar ajustes (error `webserver.api.app_sudo is false`). Actívalo en Settings → All settings → Webserver and API → `webserver.api.app_sudo` (en modo *Expert*), o añade `FTLCONF_webserver_api_app_sudo: "true"` al compose de Pi-hole. También puedes usar la contraseña principal en lugar de una *app password*.
 - **Solo DNS sin cifrar:** Pi-hole no admite DoH ni DoT como upstream, solo IPs (`IP` o `IP#puerto`). Durante el bloqueo se usa `BLOCK_PIHOLE_UPSTREAMS`, que por defecto son las IPs de xdp.es. Pi-hole no tiene bootstrap ni fallback.
 - **No definas los upstreams con variables de entorno.** Si tu contenedor de Pi-hole tiene `FTLCONF_dns_upstreams`, esa opción es de solo lectura y la API no puede cambiarla. La app lo detecta, avisa y no toca nada. Quita la variable y configura los upstreams desde la web.
 - **Caché:** para vaciar la caché se reinicia el resolver de Pi-hole (`restartdns`). Durante uno o dos segundos no resuelve.

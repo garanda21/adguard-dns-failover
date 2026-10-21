@@ -135,6 +135,7 @@ def apply_block_dns(cfg: Config, inst: Instance, store: BackupStore) -> bool:
         if not active:
             # Fail before taking a backup that could never be restored.
             backend.ensure_writable()
+        saved_now = False
         if store.get(inst.key) is None:
             if active:
                 log.warning("%s already uses block upstreams and no backup exists; skipping backup", inst.name)
@@ -142,6 +143,7 @@ def apply_block_dns(cfg: Config, inst: Instance, store: BackupStore) -> bool:
                 log.info("[dry-run] %s would back up %s", inst.name, dns)
             else:
                 store.save(inst.key, inst.url, dns)
+                saved_now = True
                 log.info("%s backup saved: %s", inst.name, _describe(dns))
         if active:
             log.info("%s already on block DNS", inst.name)
@@ -149,7 +151,13 @@ def apply_block_dns(cfg: Config, inst: Instance, store: BackupStore) -> bool:
         if cfg.dry_run:
             log.info("[dry-run] %s would switch to block DNS: %s", inst.name, backend.block_config())
             return True
-        backend.apply(backend.block_config())
+        try:
+            backend.apply(backend.block_config())
+        except DnsServerError:
+            if saved_now:
+                # Config was not changed, so the backup must not trigger a later restore.
+                store.discard(inst.key)
+            raise
     log.info("%s switched to block DNS and cache cleared", inst.name)
     return True
 
