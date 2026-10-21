@@ -14,9 +14,11 @@ from datetime import datetime
 from croniter import croniter
 
 from app import detector
-from app.adguard import AdGuardClient, AdGuardError, extract_backup
+from app.adguard import AdGuardClient, extract_backup
 from app.config import Config, ConfigError, Instance, load_config
+from app.errors import DnsServerError
 from app.notifier import TelegramNotifier, build_message
+from app.pihole import READ_ONLY_HINT, PiHoleClient, PiHoleError
 from app.state import BackupStore
 
 log = logging.getLogger("adguard-dns-failover")
@@ -48,50 +50,124 @@ def is_block_dns_active(cfg: Config, dns_info: dict) -> bool:
     return bool(current) and all(_upstream_host(u) in block_hosts for u in current)
 
 
+def _hosts(upstreams: list[str]) -> set[str]:
+    return {_upstream_host(u.split("#", 1)[0]) for u in upstreams}
+
+
+class AdGuardBackend:
+    """Backs up and switches upstream/bootstrap/fallback DNS of an AdGuard Home instance."""
+
+    def __init__(self, cfg: Config, inst: Instance):
+        self.cfg = cfg
+        self.client = AdGuardClient(inst, cfg.http_timeout)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return None
+
+    def current(self) -> dict:
+        return extract_backup(self.client.get_dns_info())
+
+    def is_block_active(self, dns: dict) -> bool:
+        return is_block_dns_active(self.cfg, dns)
+
+    def ensure_writable(self) -> None:
+        return None
+
+    def block_config(self) -> dict:
+        return block_payload(self.cfg)
+
+    def apply(self, dns: dict) -> None:
+        self.client.set_dns_config(dns)
+        self.client.clear_cache()
+
+
+class PiHoleBackend:
+    """Backs up and switches dns.upstreams of a Pi-hole v6 instance."""
+
+    def __init__(self, cfg: Config, inst: Instance):
+        self.cfg = cfg
+        self.client = PiHoleClient(inst, cfg.http_timeout)
+
+    def __enter__(self):
+        self.client.login()
+        return self
+
+    def __exit__(self, *_exc):
+        self.client.logout()
+
+    def current(self) -> dict:
+        return {"upstreams": self.client.get_upstreams()}
+
+    def is_block_active(self, dns: dict) -> bool:
+        current = [u for u in dns.get("upstreams") or [] if u.strip()]
+        return bool(current) and _hosts(current) <= _hosts(self.cfg.block_pihole_upstreams)
+
+    def ensure_writable(self) -> None:
+        if self.client.upstreams_read_only():
+            raise PiHoleError(READ_ONLY_HINT)
+
+    def block_config(self) -> dict:
+        return {"upstreams": self.cfg.block_pihole_upstreams}
+
+    def apply(self, dns: dict) -> None:
+        self.client.set_upstreams(dns["upstreams"])
+        self.client.restart_dns()  # Restarting FTL also empties its DNS cache.
+
+
+def make_backend(cfg: Config, inst: Instance):
+    return PiHoleBackend(cfg, inst) if inst.kind == "pihole" else AdGuardBackend(cfg, inst)
+
+
+def _describe(dns: dict) -> str:
+    if "upstreams" in dns:
+        return f"upstreams={dns['upstreams']}"
+    return f"upstreams={dns.get('upstream_dns')} bootstrap={dns.get('bootstrap_dns')}"
+
+
 def apply_block_dns(cfg: Config, inst: Instance, store: BackupStore) -> bool:
     """Switch to the block DNS. Returns True if the config was changed."""
-    client = AdGuardClient(inst, cfg.http_timeout)
-    info = client.get_dns_info()
-    backup = store.get(inst.id)
-    if backup is None:
-        if is_block_dns_active(cfg, info):
-            log.warning("%s already uses block upstreams and no backup exists; skipping backup", inst.name)
-        else:
-            dns = extract_backup(info)
-            if cfg.dry_run:
+    with make_backend(cfg, inst) as backend:
+        dns = backend.current()
+        active = backend.is_block_active(dns)
+        if not active:
+            # Fail before taking a backup that could never be restored.
+            backend.ensure_writable()
+        if store.get(inst.key) is None:
+            if active:
+                log.warning("%s already uses block upstreams and no backup exists; skipping backup", inst.name)
+            elif cfg.dry_run:
                 log.info("[dry-run] %s would back up %s", inst.name, dns)
             else:
-                store.save(inst.id, inst.url, dns)
-                log.info("%s backup saved: upstreams=%s bootstrap=%s",
-                         inst.name, dns.get("upstream_dns"), dns.get("bootstrap_dns"))
-    if is_block_dns_active(cfg, info):
-        log.info("%s already on block DNS", inst.name)
-        return False
-    if cfg.dry_run:
-        log.info("[dry-run] %s would switch to block DNS: %s", inst.name, block_payload(cfg))
-        return True
-    client.set_dns_config(block_payload(cfg))
-    client.clear_cache()
+                store.save(inst.key, inst.url, dns)
+                log.info("%s backup saved: %s", inst.name, _describe(dns))
+        if active:
+            log.info("%s already on block DNS", inst.name)
+            return False
+        if cfg.dry_run:
+            log.info("[dry-run] %s would switch to block DNS: %s", inst.name, backend.block_config())
+            return True
+        backend.apply(backend.block_config())
     log.info("%s switched to block DNS and cache cleared", inst.name)
     return True
 
 
 def restore(cfg: Config, inst: Instance, store: BackupStore) -> bool:
     """Restore the backed up DNS. Returns True if the config was changed."""
-    backup = store.get(inst.id)
+    backup = store.get(inst.key)
     if backup is None:
         log.debug("%s no backup, nothing to restore", inst.name)
         return False
-    client = AdGuardClient(inst, cfg.http_timeout)
     dns = backup["dns"]
     if cfg.dry_run:
         log.info("[dry-run] %s would restore %s", inst.name, dns)
         return True
-    client.set_dns_config(dns)
-    client.clear_cache()
-    store.delete(inst.id)
-    log.info("%s original DNS restored (upstreams=%s) and cache cleared",
-             inst.name, dns.get("upstream_dns"))
+    with make_backend(cfg, inst) as backend:
+        backend.apply(dns)
+    store.delete(inst.key)
+    log.info("%s original DNS restored (%s) and cache cleared", inst.name, _describe(dns))
     return True
 
 
@@ -114,13 +190,15 @@ def run_once(cfg: Config, store: BackupStore, notifier: TelegramNotifier | None 
         try:
             if apply_block_dns(cfg, inst, store) if status.active else restore(cfg, inst, store):
                 changed.append(inst.label)
-        except AdGuardError as exc:
+        except DnsServerError as exc:
             failed.append(inst.label)
             log.error("%s: %s", inst.name, exc)
 
     # Notify only on transitions (some instance changed) or on errors while switching.
     if notifier and (changed or failed) and not cfg.dry_run:
-        notifier.send(build_message(status.active, status, changed, failed, cfg.block_upstreams))
+        kinds = {i.kind for i in cfg.instances}
+        shown = cfg.block_upstreams if "adguard" in kinds else cfg.block_pihole_upstreams
+        notifier.send(build_message(status.active, status, changed, failed, shown))
     return 1 if failed else 0
 
 
@@ -169,10 +247,12 @@ def status_cmd(cfg: Config, store: BackupStore) -> int:
     except Exception as exc:  # noqa: BLE001
         print(f"Block check failed: {exc}")
     for inst in cfg.instances:
-        backup = store.get(inst.id)
+        backup = store.get(inst.key)
         try:
-            ups = AdGuardClient(inst, cfg.http_timeout).get_dns_info().get("upstream_dns")
-        except AdGuardError as exc:
+            with make_backend(cfg, inst) as backend:
+                dns = backend.current()
+            ups = dns.get("upstreams", dns.get("upstream_dns"))
+        except DnsServerError as exc:
             ups = f"error: {exc}"
         print(f"{inst.name}: upstreams={ups} backup={'yes (' + backup['saved_at'] + ')' if backup else 'no'}")
     return 0
@@ -212,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         for inst in cfg.instances:
             try:
                 restore(cfg, inst, store)
-            except AdGuardError as exc:
+            except DnsServerError as exc:
                 errors += 1
                 log.error("%s: %s", inst.name, exc)
         return 1 if errors else 0

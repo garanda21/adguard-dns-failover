@@ -190,3 +190,86 @@ def test_isps_filter():
 def test_isps_config(tmp_path):
     assert load_config(env(tmp_path)).isps == []
     assert load_config(env(tmp_path, ISPS="movistar, Orange;digi")).isps == ["movistar", "Orange", "digi"]
+
+
+PH = "http://pihole.test"
+
+
+def pihole_mock(current, read_only=False):
+    import json
+
+    def get_upstreams(req):
+        if "detailed=true" in req.url:
+            return 200, {}, json.dumps({"config": {"dns": {"upstreams": {
+                "value": current["upstreams"], "flags": {"env_var": read_only}}}}})
+        return 200, {}, json.dumps({"config": {"dns": {"upstreams": current["upstreams"]}}})
+
+    def patch(req):
+        assert req.headers["X-FTL-SID"] == "SID1"
+        current["upstreams"] = json.loads(req.body)["config"]["dns"]["upstreams"]
+        return 200, {}, "{}"
+
+    responses.add(responses.POST, f"{PH}/api/auth",
+                  json={"session": {"valid": True, "sid": "SID1", "validity": 1800}})
+    responses.add(responses.DELETE, f"{PH}/api/auth", status=204)
+    responses.add_callback(responses.GET, f"{PH}/api/config/dns/upstreams", callback=get_upstreams)
+    responses.add_callback(responses.PATCH, f"{PH}/api/config", callback=patch)
+    responses.add(responses.POST, f"{PH}/api/action/restartdns", json={"status": "ok"})
+
+
+def pihole_env(tmp_path, **extra):
+    base = {"PIHOLE_1_URL": PH, "PIHOLE_1_PASSWORD": "app-pass", "API_URL": API, "DATA_DIR": str(tmp_path)}
+    base.update(extra)
+    return base
+
+
+@responses.activate
+def test_pihole_block_cycle(tmp_path):
+    cfg = load_config(pihole_env(tmp_path))
+    store = BackupStore(cfg.data_dir)
+    inst = cfg.instances[0]
+    assert (inst.kind, inst.key, inst.name) == ("pihole", "pihole_1", f"Pi-hole #1 ({PH})")
+    current = {"upstreams": ["8.8.8.8", "1.1.1.1#53"]}
+    pihole_mock(current)
+
+    responses.add(responses.GET, API, json=payload(4))
+    assert m.run_once(cfg, store) == 0
+    assert current["upstreams"] == ["85.208.114.51", "51.170.52.10"]
+    assert store.get("pihole_1")["dns"] == {"upstreams": ["8.8.8.8", "1.1.1.1#53"]}
+    assert m.run_once(cfg, store) == 0  # still blocked: no change, backup kept
+    assert store.get("pihole_1")["dns"]["upstreams"] == ["8.8.8.8", "1.1.1.1#53"]
+
+    responses.replace(responses.GET, API, json=payload(0))
+    assert m.run_once(cfg, store) == 0
+    assert current["upstreams"] == ["8.8.8.8", "1.1.1.1#53"]
+    assert store.get("pihole_1") is None
+
+    calls = [c.request for c in responses.calls]
+    assert sum(1 for r in calls if r.url.endswith("/api/action/restartdns")) == 2
+    # Every login is paired with a logout so API seats are released.
+    assert sum(1 for r in calls if r.method == "POST" and r.url.endswith("/api/auth")) == \
+        sum(1 for r in calls if r.method == "DELETE")
+
+
+@responses.activate
+def test_pihole_read_only_upstreams(tmp_path):
+    cfg = load_config(pihole_env(tmp_path))
+    pihole_mock({"upstreams": ["8.8.8.8"]}, read_only=True)
+    responses.add(responses.GET, API, json=payload(4))
+    assert m.run_once(cfg, BackupStore(cfg.data_dir)) == 1
+    assert not any(c.request.method == "PATCH" for c in responses.calls)
+    assert BackupStore(cfg.data_dir).get("pihole_1") is None  # no unrestorable backup
+
+
+@responses.activate
+def test_pihole_bad_password(tmp_path):
+    cfg = load_config(pihole_env(tmp_path))
+    responses.add(responses.POST, f"{PH}/api/auth", status=401, json={"session": {"valid": False}})
+    responses.add(responses.GET, API, json=payload(4))
+    assert m.run_once(cfg, BackupStore(cfg.data_dir)) == 1
+
+
+def test_mixed_instances_config(tmp_path):
+    cfg = load_config(env(tmp_path, PIHOLE_1_URL=PH, BLOCK_PIHOLE_UPSTREAMS="9.9.9.9#53"))
+    assert [(i.kind, i.key) for i in cfg.instances] == [("adguard", "1"), ("pihole", "pihole_1")]
+    assert cfg.block_pihole_upstreams == ["9.9.9.9#53"]

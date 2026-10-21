@@ -1,6 +1,6 @@
 # adguard-dns-failover
 
-Cambia automáticamente los DNS de tus instancias de **AdGuard Home** a unos DNS alternativos cuando se detectan bloqueos masivos de IPs (por ejemplo, de rangos de Cloudflare), y restaura tu configuración original cuando el bloqueo termina.
+Cambia automáticamente los DNS de tus instancias de **AdGuard Home** y/o **Pi-hole v6** a unos DNS alternativos cuando se detectan bloqueos masivos de IPs (por ejemplo, de rangos de Cloudflare), y restaura tu configuración original cuando el bloqueo termina.
 
 Puedes usar el servicio DNS que quieras. Por defecto se usa [xdp.es](https://xdp.es), que devuelve IPs de Cloudflare no bloqueadas.
 
@@ -54,6 +54,21 @@ ADGUARD_2_PASSWORD_FILE=/run/secrets/adguard_2_password   # alternativa con Dock
 ```
 
 La URL es la de la interfaz web (la misma con la que entras al panel).
+
+### Instancias de Pi-hole (v6)
+
+Se pueden mezclar con las de AdGuard. Solo es compatible **Pi-hole v6**, porque la v5 no tiene API para cambiar los DNS:
+
+```env
+PIHOLE_1_URL=http://192.168.1.10
+PIHOLE_1_NAME=Pi-hole NAS
+PIHOLE_1_PASSWORD=app-password
+```
+
+- **Contraseña:** usa una *app password* (en Pi-hole: Ajustes → Web interface / API → *Configure app password*). Si tu Pi-hole no tiene contraseña, déjala vacía.
+- **Solo DNS sin cifrar:** Pi-hole no admite DoH ni DoT como upstream, solo IPs (`IP` o `IP#puerto`). Durante el bloqueo se usa `BLOCK_PIHOLE_UPSTREAMS`, que por defecto son las IPs de xdp.es. Pi-hole no tiene bootstrap ni fallback.
+- **No definas los upstreams con variables de entorno.** Si tu contenedor de Pi-hole tiene `FTLCONF_dns_upstreams`, esa opción es de solo lectura y la API no puede cambiarla. La app lo detecta, avisa y no toca nada. Quita la variable y configura los upstreams desde la web.
+- **Caché:** para vaciar la caché se reinicia el resolver de Pi-hole (`restartdns`). Durante uno o dos segundos no resuelve.
 
 ### Programación
 
@@ -112,6 +127,7 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 | `ADGUARD_<n>_NAME` | host de la URL | Nombre en las notificaciones |
 | `TELEGRAM_BOT_TOKEN` | — | Token del bot (admite `_FILE`) |
 | `TELEGRAM_CHAT_ID` | — | Chat id(s) separados por `;` |
+| `PIHOLE_<n>_URL` / `_PASSWORD` / `_NAME` | — | Instancias de Pi-hole v6 (admite `_PASSWORD_FILE`) |
 | `CRON_SCHEDULES` | `*/30 * * * *` | Crons separados por `;` |
 | `RUN_ON_START` | `true` | Comprobar al arrancar el contenedor |
 | `TZ` | `Europe/Madrid` | Zona horaria de los cron |
@@ -122,6 +138,7 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 | `BLOCK_UPSTREAMS` | `https://dns.xdp.es/dns-query;tls://dns.xdp.es` | Upstreams durante el bloqueo |
 | `BLOCK_BOOTSTRAP` | `85.208.114.51;51.170.52.10` | Bootstrap durante el bloqueo |
 | `BLOCK_FALLBACK` | igual que `BLOCK_UPSTREAMS` | Fallback DNS durante el bloqueo (`none` = no tocarlo) |
+| `BLOCK_PIHOLE_UPSTREAMS` | `85.208.114.51;51.170.52.10` | Upstreams de Pi-hole durante el bloqueo (solo IP o `IP#puerto`) |
 | `BLOCK_UPSTREAM_MODE` | (no se cambia) | `load_balance`, `parallel` o `fastest_addr` |
 | `DRY_RUN` | `false` | Solo muestra lo que haría, sin cambiar nada |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`… |

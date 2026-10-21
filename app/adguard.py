@@ -5,12 +5,13 @@ from __future__ import annotations
 import requests
 
 from app.config import Instance
+from app.errors import DnsServerError
 
 # DNS fields saved in backups and restored afterwards.
 BACKUP_FIELDS = ("upstream_dns", "bootstrap_dns", "fallback_dns", "upstream_mode")
 
 
-class AdGuardError(Exception):
+class AdGuardError(DnsServerError):
     pass
 
 
