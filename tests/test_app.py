@@ -306,3 +306,44 @@ def test_verify_ssl_option(tmp_path):
     assert cfg.instances[0].verify_ssl is False
     assert PiHoleClient(cfg.instances[0]).http.verify is False
     assert load_config(env(tmp_path)).instances[0].verify_ssl is True
+
+
+def app_password_login(app_sudo):
+    responses.replace(responses.POST, f"{PH}/api/auth", json={"session": {
+        "valid": True, "sid": "SID1", "validity": 1800, "message": "app-password correct"}})
+    responses.add(responses.GET, f"{PH}/api/config/webserver/api/app_sudo",
+                  json={"config": {"webserver": {"api": {"app_sudo": app_sudo}}}})
+
+
+@responses.activate
+def test_pihole_app_password_without_sudo_is_caught_before_backup(tmp_path):
+    cfg = load_config(pihole_env(tmp_path))
+    store = BackupStore(cfg.data_dir)
+    pihole_mock({"upstreams": ["8.8.8.8"]})
+    app_password_login(False)
+    responses.add(responses.GET, API, json=payload(4))
+    assert m.run_once(cfg, store) == 1
+    assert store.get("pihole_1") is None
+    assert not any(c.request.method == "PATCH" for c in responses.calls)
+
+
+@responses.activate
+def test_check_instances_ok_and_failures(tmp_path):
+    from app.notifier import TelegramNotifier
+
+    cfg = load_config(pihole_env(tmp_path, TELEGRAM_BOT_TOKEN="T", TELEGRAM_CHAT_ID="1"))
+    notifier = TelegramNotifier(cfg.telegram_bot_token, cfg.telegram_chat_ids)
+    tg = responses.add(responses.POST, "https://api.telegram.org/botT/sendMessage", json={"ok": True})
+    current = {"upstreams": ["8.8.8.8"]}
+    pihole_mock(current)
+    app_password_login(True)
+    assert m.check_instances(cfg, notifier) == []
+    assert tg.call_count == 0
+    assert current["upstreams"] == ["8.8.8.8"]  # read-only check, nothing changed
+
+    responses.replace(responses.GET, f"{PH}/api/config/webserver/api/app_sudo",
+                      json={"config": {"webserver": {"api": {"app_sudo": False}}}})
+    assert m.check_instances(cfg, notifier) == [PH.removeprefix("http://")]
+    import json
+    text = json.loads(tg.calls[0].request.body)["text"]
+    assert "Problema de conexión" in text and "app_sudo" in text

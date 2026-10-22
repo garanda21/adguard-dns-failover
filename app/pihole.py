@@ -7,6 +7,10 @@ import requests
 from app.config import Instance
 from app.errors import DnsServerError
 
+APP_SUDO_HINT = (
+    "app passwords cannot change settings: enable webserver.api.app_sudo in Pi-hole "
+    "(Settings > All settings > Webserver and API) or use the main password"
+)
 READ_ONLY_HINT = (
     "dns.upstreams looks read-only: remove FTLCONF_dns_upstreams from the Pi-hole "
     "environment and set the upstreams from the web UI instead"
@@ -26,6 +30,8 @@ class PiHoleClient:
         self.http = requests.Session()
         self.http.verify = instance.verify_ssl
         self.sid: str | None = None
+        # True when logged in with an app password (needs app_sudo to change settings).
+        self.app_session = False
 
     def __enter__(self) -> "PiHoleClient":
         self.login()
@@ -49,8 +55,7 @@ class PiHoleClient:
         if resp.status_code >= 400:
             detail = resp.text.strip()[:300]
             if "app_sudo" in detail:
-                detail = ("app passwords cannot change settings: enable webserver.api.app_sudo in Pi-hole "
-                          "(Settings > All settings > Webserver and API) or use the main password")
+                detail = APP_SUDO_HINT
             raise PiHoleError(f"{method} {url} -> HTTP {resp.status_code}: {detail}")
         return resp
 
@@ -63,6 +68,7 @@ class PiHoleClient:
         if not session.get("valid"):
             raise PiHoleError(f"Pi-hole login failed: {session.get('message') or 'invalid session'}")
         self.sid = session.get("sid")
+        self.app_session = "app-password" in (session.get("message") or "")
 
     def logout(self) -> None:
         if not self.sid:
@@ -86,6 +92,10 @@ class PiHoleClient:
         except (PiHoleError, KeyError, AttributeError, ValueError):
             return False
         return bool(flags.get("env_var"))
+
+    def app_sudo_enabled(self) -> bool:
+        data = self._request("GET", "config/webserver/api/app_sudo").json()
+        return bool(data["config"]["webserver"]["api"]["app_sudo"])
 
     def set_upstreams(self, upstreams: list[str]) -> None:
         if self.upstreams_read_only():

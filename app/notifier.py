@@ -53,6 +53,20 @@ def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: lis
     return "\n".join(parts)
 
 
+def build_check_message(failed: list[tuple[str, str]]) -> str:
+    now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
+    parts = [
+        "⚠️🔌 <b>Problema de conexión con tus servidores DNS</b>",
+        "",
+        "Al arrancar no se ha podido verificar el acceso a estas instancias. "
+        "Si hay un bloqueo, no se podrán cambiar sus DNS:",
+        "",
+    ]
+    parts += [f"❌ <b>{html.escape(label)}</b>\n<code>{html.escape(error[:300])}</code>" for label, error in failed]
+    parts += ["", "Revisa la configuración y reinicia el contenedor.", "", f"🕒 {now}"]
+    return "\n".join(parts)
+
+
 class TelegramNotifier:
     def __init__(self, token: str | None, chat_ids: list[str], timeout: float = 15.0):
         self.token = token

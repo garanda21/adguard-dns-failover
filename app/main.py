@@ -17,8 +17,8 @@ from app import detector
 from app.adguard import AdGuardClient, extract_backup
 from app.config import Config, ConfigError, Instance, load_config
 from app.errors import DnsServerError
-from app.notifier import TelegramNotifier, build_message
-from app.pihole import READ_ONLY_HINT, PiHoleClient, PiHoleError
+from app.notifier import TelegramNotifier, build_check_message, build_message
+from app.pihole import APP_SUDO_HINT, READ_ONLY_HINT, PiHoleClient, PiHoleError
 from app.state import BackupStore
 
 log = logging.getLogger("adguard-dns-failover")
@@ -108,6 +108,8 @@ class PiHoleBackend:
     def ensure_writable(self) -> None:
         if self.client.upstreams_read_only():
             raise PiHoleError(READ_ONLY_HINT)
+        if self.client.app_session and not self.client.app_sudo_enabled():
+            raise PiHoleError(APP_SUDO_HINT)
 
     def block_config(self) -> dict:
         return {"upstreams": self.cfg.block_pihole_upstreams}
@@ -179,6 +181,23 @@ def restore(cfg: Config, inst: Instance, store: BackupStore) -> bool:
     return True
 
 
+def check_instances(cfg: Config, notifier: TelegramNotifier | None = None) -> list[str]:
+    """Connect to every instance without changing anything; return labels that failed."""
+    failed: list[tuple[str, str]] = []
+    for inst in cfg.instances:
+        try:
+            with make_backend(cfg, inst) as backend:
+                dns = backend.current()
+                backend.ensure_writable()
+            log.info("%s: OK, writable (%s)", inst.name, _describe(dns))
+        except DnsServerError as exc:
+            failed.append((inst.label, str(exc)))
+            log.error("%s: connection check failed: %s", inst.name, exc)
+    if failed and notifier:
+        notifier.send(build_check_message(failed))
+    return [label for label, _ in failed]
+
+
 def run_once(cfg: Config, store: BackupStore, notifier: TelegramNotifier | None = None) -> int:
     try:
         status = detector.check(cfg.api_url, cfg.block_threshold_pct, cfg.block_min_ips, cfg.http_timeout, cfg.isps)
@@ -232,6 +251,7 @@ def loop(cfg: Config, store: BackupStore) -> None:
     log.info("ISPs checked: %s", ", ".join(cfg.isps) if cfg.isps else "all")
     notifier = make_notifier(cfg)
     log.info("Telegram notifications: %s", "enabled" if notifier.enabled else "disabled")
+    check_instances(cfg, notifier)
     if cfg.run_on_start:
         run_once(cfg, store, notifier)
     while not stop:

@@ -145,13 +145,19 @@ volumes:
 
 #### Comprobar que funciona
 
-Al arrancar, la app **no contacta con Pi-hole** si no hay bloqueo. Para comprobar que la URL, la contraseña y el certificado son correctos, ejecuta:
+Al arrancar, la app se conecta a cada instancia **sin cambiar nada** y comprueba que puede modificar los DNS. Incluye la URL, la contraseña, el certificado, `app_sudo` y `FTLCONF_dns_upstreams`. El resultado aparece en el log:
+
+```
+INFO Pi-hole #1 (https://192.168.1.10:8443): OK, writable (upstreams=['8.8.8.8', '1.1.1.1'])
+```
+
+Si algo falla, sale un `ERROR ... connection check failed:` con el motivo, y llega un aviso por Telegram (si está configurado). También puedes comprobarlo en cualquier momento con:
 
 ```bash
 docker compose exec adguard-dns-failover python -m app status
 ```
 
-Debe mostrar tus upstreams actuales, por ejemplo `Pi-hole #1 (...): upstreams=['8.8.8.8', ...] backup=no`. Si sale `error:`, revisa el mensaje. Si quieres simular un bloqueo, pon temporalmente `BLOCK_MIN_IPS=1` (basta con que un operador tenga una IP bloqueada) junto con `DRY_RUN=true`.
+Para simular un bloqueo, pon temporalmente `BLOCK_MIN_IPS=1` (basta con que un operador tenga una IP bloqueada), con `DRY_RUN=true` si no quieres cambios reales.
 
 #### Diferencias con AdGuard
 
