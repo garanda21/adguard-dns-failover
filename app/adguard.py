@@ -20,6 +20,7 @@ class AdGuardClient:
         self.instance = instance
         self.timeout = timeout
         self.session = requests.Session()
+        self.session.verify = instance.verify_ssl
         if instance.user is not None:
             self.session.auth = (instance.user, instance.password or "")
 

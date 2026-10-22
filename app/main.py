@@ -267,6 +267,11 @@ def status_cmd(cfg: Config, store: BackupStore) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Self-signed certificates are opted into explicitly with *_VERIFY_SSL=false.
+    import urllib3
+
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     parser = argparse.ArgumentParser(prog="adguard-dns-failover")
     parser.add_argument("command", nargs="?", default="daemon",
                         choices=["daemon", "run-once", "status", "restore", "test-telegram"])

@@ -28,6 +28,7 @@ class Instance:
     password: str | None
     display_name: str | None = None
     kind: str = "adguard"
+    verify_ssl: bool = True
 
     @property
     def key(self) -> str:
@@ -112,6 +113,8 @@ def _load_kind(env: dict[str, str], prefix: str, kind: str) -> list[Instance]:
                 password=_secret(env, f"{prefix}_{i}_PASSWORD"),
                 display_name=(env.get(f"{prefix}_{i}_NAME") or "").strip() or None,
                 kind=kind,
+                # Set to false for self-signed certificates (e.g. Pi-hole's default HTTPS).
+                verify_ssl=_bool(env.get(f"{prefix}_{i}_VERIFY_SSL"), True),
             )
         )
     return instances

@@ -76,6 +76,7 @@ PIHOLE_1_URL=http://192.168.1.10:8081   # URL de la interfaz web, sin /admin
 PIHOLE_1_NAME=Pi-hole NAS               # opcional, nombre que aparece en Telegram
 PIHOLE_1_PASSWORD=app-password
 # PIHOLE_1_PASSWORD_FILE=/run/secrets/pihole_1_password
+# PIHOLE_1_VERIFY_SSL=false             # si usas https:// con el certificado autofirmado de Pi-hole
 
 # Opcional: upstreams durante el bloqueo (solo IP o IP#puerto)
 # BLOCK_PIHOLE_UPSTREAMS=85.208.114.51;51.170.52.10
@@ -115,6 +116,42 @@ services:
       - ./etc-pihole:/etc/pihole
     restart: unless-stopped
 ```
+
+#### Ejemplo: compose de la app solo con Pi-hole
+
+Si prefieres no usar `.env`, puedes poner todo en el compose:
+
+```yaml
+services:
+  adguard-dns-failover:
+    image: garanda21/adguard-dns-failover:pihole
+    container_name: pihole-dns-failover
+    restart: unless-stopped
+    environment:
+      PIHOLE_1_URL: "https://192.168.1.10:8443"   # URL de la interfaz web, sin /admin
+      PIHOLE_1_VERIFY_SSL: "false"                # Pi-hole usa un certificado autofirmado
+      PIHOLE_1_NAME: "Pi-hole casa"               # opcional, nombre que aparece en Telegram
+      PIHOLE_1_PASSWORD: "app-password"
+      TELEGRAM_BOT_TOKEN: "123456:ABC-DEF..."
+      TELEGRAM_CHAT_ID: "123456789"
+      DRY_RUN: "true"                             # quítalo cuando hayas comprobado que funciona
+      # BLOCK_PIHOLE_UPSTREAMS: "85.208.114.51;51.170.52.10"
+    volumes:
+      - failover_data:/data
+
+volumes:
+  failover_data:
+```
+
+#### Comprobar que funciona
+
+Al arrancar, la app **no contacta con Pi-hole** si no hay bloqueo. Para comprobar que la URL, la contraseña y el certificado son correctos, ejecuta:
+
+```bash
+docker compose exec adguard-dns-failover python -m app status
+```
+
+Debe mostrar tus upstreams actuales, por ejemplo `Pi-hole #1 (...): upstreams=['8.8.8.8', ...] backup=no`. Si sale `error:`, revisa el mensaje. Si quieres simular un bloqueo, pon temporalmente `BLOCK_MIN_IPS=1` (basta con que un operador tenga una IP bloqueada) junto con `DRY_RUN=true`.
 
 #### Diferencias con AdGuard
 
@@ -180,6 +217,7 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 | `PIHOLE_<n>_URL` | — | URL de cada instancia de Pi-hole v6 (beta) |
 | `PIHOLE_<n>_PASSWORD` | — | *App password* o contraseña principal. Admite `_PASSWORD_FILE`. Vacía si Pi-hole no tiene contraseña |
 | `PIHOLE_<n>_NAME` | host de la URL | Nombre en las notificaciones |
+| `ADGUARD_<n>_VERIFY_SSL` / `PIHOLE_<n>_VERIFY_SSL` | `true` | `false` para aceptar certificados autofirmados con `https://` |
 | `TELEGRAM_BOT_TOKEN` | — | Token del bot (admite `_FILE`) |
 | `TELEGRAM_CHAT_ID` | — | Chat id(s) separados por `;` |
 | `CRON_SCHEDULES` | `*/30 * * * *` | Crons separados por `;` |
@@ -222,6 +260,8 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 - **Datos móviles:** con datos móviles no se pasa por tu servidor DNS.
 
 **Pi-hole: error `webserver.api.app_sudo is false` (HTTP 403).** La *app password* no tiene permiso para cambiar ajustes. Activa `app_sudo` (ver [Preparar Pi-hole](#preparar-pi-hole)) o usa la contraseña principal.
+
+**Pi-hole: `TLS certificate not trusted`.** Usas `https://` y Pi-hole tiene su certificado autofirmado por defecto. Pon `PIHOLE_<n>_VERIFY_SSL=false` o usa la URL `http://`.
 
 **Pi-hole: `dns.upstreams looks read-only`.** Tu compose de Pi-hole define `FTLCONF_dns_upstreams`. Quítalo y configura los upstreams desde la web.
 

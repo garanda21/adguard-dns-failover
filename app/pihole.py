@@ -24,6 +24,7 @@ class PiHoleClient:
         self.instance = instance
         self.timeout = timeout
         self.http = requests.Session()
+        self.http.verify = instance.verify_ssl
         self.sid: str | None = None
 
     def __enter__(self) -> "PiHoleClient":
@@ -38,6 +39,11 @@ class PiHoleClient:
         headers = {"X-FTL-SID": self.sid} if self.sid else {}
         try:
             resp = self.http.request(method, url, timeout=self.timeout, headers=headers, **kwargs)
+        except requests.exceptions.SSLError as exc:
+            raise PiHoleError(
+                f"{method} {url} failed: TLS certificate not trusted. If Pi-hole uses its default "
+                f"self-signed certificate, set PIHOLE_{self.instance.id}_VERIFY_SSL=false or use http://"
+            ) from exc
         except requests.RequestException as exc:
             raise PiHoleError(f"{method} {url} failed: {exc}") from exc
         if resp.status_code >= 400:

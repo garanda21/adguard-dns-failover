@@ -297,3 +297,12 @@ def test_message_when_every_instance_failed():
     ok = build_message(True, st, ["NAS"], [], ["1.2.3.4"])
     assert "Tus servidores DNS han cambiado" in ok and "restablecida" in ok
     assert "No se han podido restaurar" in build_message(False, st, [], ["NAS"], [])
+
+
+def test_verify_ssl_option(tmp_path):
+    from app.pihole import PiHoleClient
+
+    cfg = load_config(pihole_env(tmp_path, PIHOLE_1_URL="https://ph.test:8443", PIHOLE_1_VERIFY_SSL="false"))
+    assert cfg.instances[0].verify_ssl is False
+    assert PiHoleClient(cfg.instances[0]).http.verify is False
+    assert load_config(env(tmp_path)).instances[0].verify_ssl is True
