@@ -226,6 +226,7 @@ def loop(cfg: Config, store: BackupStore) -> None:
     signal.signal(signal.SIGINT, _handle)
 
     log.info("adguard-dns-failover %s", os.environ.get("APP_VERSION", "dev"))
+    log.info("Mode: %s", "DRY-RUN (no changes will be made)" if cfg.dry_run else "live")
     log.info("Instances: %s", ", ".join(i.name for i in cfg.instances))
     log.info("Schedules: %s", " | ".join(cfg.cron_schedules))
     log.info("ISPs checked: %s", ", ".join(cfg.isps) if cfg.isps else "all")
