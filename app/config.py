@@ -10,6 +10,10 @@ from pathlib import Path
 DEFAULT_API_URL = "https://hayahora.futbol/estado/data.json"
 DEFAULT_BLOCK_UPSTREAMS = "https://dns.xdp.es/dns-query;tls://dns.xdp.es"
 DEFAULT_BLOCK_BOOTSTRAP = "85.208.114.51;51.170.52.10"
+# Pi-hole only supports plain DNS upstreams (IP or IP#port), no DoH/DoT.
+DEFAULT_BLOCK_PIHOLE_UPSTREAMS = "85.208.114.51;51.170.52.10"
+
+KIND_LABELS = {"adguard": "AdGuard", "pihole": "Pi-hole"}
 
 
 class ConfigError(Exception):
@@ -23,6 +27,13 @@ class Instance:
     user: str | None
     password: str | None
     display_name: str | None = None
+    kind: str = "adguard"
+    verify_ssl: bool = True
+
+    @property
+    def key(self) -> str:
+        """Backup key; AdGuard keeps the bare id for backward compatibility."""
+        return self.id if self.kind == "adguard" else f"{self.kind}_{self.id}"
 
     @property
     def label(self) -> str:
@@ -31,7 +42,7 @@ class Instance:
 
     @property
     def name(self) -> str:
-        return f"#{self.id} ({self.url})"
+        return f"{KIND_LABELS[self.kind]} #{self.id} ({self.url})"
 
 
 @dataclass
@@ -47,11 +58,13 @@ class Config:
     block_bootstrap: list[str] = field(default_factory=list)
     block_fallback: list[str] = field(default_factory=list)
     block_upstream_mode: str = ""
+    block_pihole_upstreams: list[str] = field(default_factory=list)
     data_dir: Path = Path("/data")
     http_timeout: float = 15.0
     dry_run: bool = False
     telegram_bot_token: str | None = None
     telegram_chat_ids: list[str] = field(default_factory=list)
+    telegram_startup_message: bool = True
 
 
 def split_list(value: str | None) -> list[str]:
@@ -78,24 +91,31 @@ def _secret(env: dict[str, str], key: str) -> str | None:
 
 
 def load_instances(env: dict[str, str]) -> list[Instance]:
+    return _load_kind(env, "ADGUARD", "adguard") + _load_kind(env, "PIHOLE", "pihole")
+
+
+def _load_kind(env: dict[str, str], prefix: str, kind: str) -> list[Instance]:
     ids = sorted(
-        {m.group(1) for k in env if (m := re.fullmatch(r"ADGUARD_(\w+?)_URL", k))},
+        {m.group(1) for k in env if (m := re.fullmatch(rf"{prefix}_(\w+?)_URL", k))},
         key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else 0, x),
     )
     instances = []
     for i in ids:
-        url = env[f"ADGUARD_{i}_URL"].strip().rstrip("/")
+        url = env[f"{prefix}_{i}_URL"].strip().rstrip("/")
         if not url:
             continue
         if not re.match(r"^https?://", url):
-            raise ConfigError(f"ADGUARD_{i}_URL must start with http:// or https://")
+            raise ConfigError(f"{prefix}_{i}_URL must start with http:// or https://")
         instances.append(
             Instance(
                 id=i,
                 url=url,
-                user=_secret(env, f"ADGUARD_{i}_USER"),
-                password=_secret(env, f"ADGUARD_{i}_PASSWORD"),
-                display_name=(env.get(f"ADGUARD_{i}_NAME") or "").strip() or None,
+                user=_secret(env, f"{prefix}_{i}_USER"),
+                password=_secret(env, f"{prefix}_{i}_PASSWORD"),
+                display_name=(env.get(f"{prefix}_{i}_NAME") or "").strip() or None,
+                kind=kind,
+                # Set to false for self-signed certificates (e.g. Pi-hole's default HTTPS).
+                verify_ssl=_bool(env.get(f"{prefix}_{i}_VERIFY_SSL"), True),
             )
         )
     return instances
@@ -105,7 +125,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
     env = dict(os.environ if env is None else env)
     instances = load_instances(env)
     if not instances:
-        raise ConfigError("No AdGuard instances configured (set ADGUARD_1_URL, ...)")
+        raise ConfigError("No instances configured (set ADGUARD_1_URL and/or PIHOLE_1_URL, ...)")
 
     crons = split_list(env.get("CRON_SCHEDULES", "*/30 * * * *"))
     from croniter import croniter
@@ -134,9 +154,11 @@ def load_config(env: dict[str, str] | None = None) -> Config:
             else split_list(env.get("BLOCK_FALLBACK")) or upstreams
         ),
         block_upstream_mode=env.get("BLOCK_UPSTREAM_MODE", "").strip(),
+        block_pihole_upstreams=split_list(env.get("BLOCK_PIHOLE_UPSTREAMS", DEFAULT_BLOCK_PIHOLE_UPSTREAMS)),
         data_dir=Path(env.get("DATA_DIR") or "/data"),
         http_timeout=float(env.get("HTTP_TIMEOUT") or 15),
         dry_run=_bool(env.get("DRY_RUN"), False),
         telegram_bot_token=_secret(env, "TELEGRAM_BOT_TOKEN"),
         telegram_chat_ids=split_list(env.get("TELEGRAM_CHAT_ID")),
+        telegram_startup_message=_bool(env.get("TELEGRAM_STARTUP_MESSAGE"), True),
     )

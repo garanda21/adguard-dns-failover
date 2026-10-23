@@ -5,12 +5,13 @@ from __future__ import annotations
 import requests
 
 from app.config import Instance
+from app.errors import DnsServerError
 
 # DNS fields saved in backups and restored afterwards.
 BACKUP_FIELDS = ("upstream_dns", "bootstrap_dns", "fallback_dns", "upstream_mode")
 
 
-class AdGuardError(Exception):
+class AdGuardError(DnsServerError):
     pass
 
 
@@ -19,6 +20,7 @@ class AdGuardClient:
         self.instance = instance
         self.timeout = timeout
         self.session = requests.Session()
+        self.session.verify = instance.verify_ssl
         if instance.user is not None:
             self.session.auth = (instance.user, instance.password or "")
 

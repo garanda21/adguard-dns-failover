@@ -40,3 +40,7 @@ class BackupStore:
         if path.exists():
             # Keep the last restored backup around for reference.
             os.replace(path, path.with_suffix(".restored.json"))
+
+    def discard(self, instance_id: str) -> None:
+        """Drop a backup whose switch never happened."""
+        self._path(instance_id).unlink(missing_ok=True)

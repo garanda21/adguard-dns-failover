@@ -13,7 +13,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE_NAME: garanda21/adguard-dns-failover
+  IMAGE_NAME: garanda21/dns-blockswitch
+  # Former name; keep publishing here until nobody pulls it anymore.
+  LEGACY_IMAGE_NAME: garanda21/adguard-dns-failover
   PYTHON_VERSION: "3.12"
 
 jobs:
@@ -114,6 +116,9 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ steps.release.outputs.version }}
             ${{ env.IMAGE_NAME }}:${{ steps.release.outputs.tag }}
             ${{ env.IMAGE_NAME }}:${{ steps.release.outputs.channel }}
+            ${{ env.LEGACY_IMAGE_NAME }}:${{ steps.release.outputs.version }}
+            ${{ env.LEGACY_IMAGE_NAME }}:${{ steps.release.outputs.tag }}
+            ${{ env.LEGACY_IMAGE_NAME }}:${{ steps.release.outputs.channel }}
           build-args: |
             APP_VERSION=${{ steps.release.outputs.version }}
             GIT_COMMIT=${{ steps.release.outputs.commit }}
@@ -136,7 +141,7 @@ jobs:
           options=(
             "${RELEASE_TAG}"
             --verify-tag
-            --title "adguard-dns-failover ${RELEASE_VERSION}"
+            --title "dns-blockswitch ${RELEASE_VERSION}"
             --generate-notes
           )
           if [[ "${IS_PRERELEASE}" == "true" ]]; then

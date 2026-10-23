@@ -1,9 +1,9 @@
 services:
-  adguard-dns-failover:
-    image: garanda21/adguard-dns-failover:latest
+  dns-blockswitch:
+    image: garanda21/dns-blockswitch:latest
     # To build locally instead, uncomment:
     # build: .
-    container_name: adguard-dns-failover
+    container_name: dns-blockswitch
     restart: unless-stopped
     env_file: .env
     volumes:

@@ -69,6 +69,6 @@ def evaluate(payload: dict, threshold_pct: float, min_ips: int = 0,
 
 def check(api_url: str, threshold_pct: float, min_ips: int = 0, timeout: float = 15.0,
           isps_filter: list[str] | None = None) -> BlockStatus:
-    resp = requests.get(api_url, timeout=timeout, headers={"User-Agent": "adguard-dns-failover"})
+    resp = requests.get(api_url, timeout=timeout, headers={"User-Agent": "dns-blockswitch"})
     resp.raise_for_status()
     return evaluate(resp.json(), threshold_pct, min_ips, isps_filter)
