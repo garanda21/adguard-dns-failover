@@ -70,7 +70,7 @@ def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: b
         parts += ["", "Revisa la configuración y reinicia el contenedor."]
     else:
         parts = [
-            "🤖✅ <b>adguard-dns-failover operativo</b>",
+            "🤖✅ <b>dns-blockswitch operativo</b>",
             "",
             "Conexión verificada con tus servidores DNS:",
             _instance_lines(ok, "🟢"),

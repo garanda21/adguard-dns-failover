@@ -21,7 +21,7 @@ from app.notifier import TelegramNotifier, build_check_message, build_message
 from app.pihole import APP_SUDO_HINT, READ_ONLY_HINT, PiHoleClient, PiHoleError
 from app.state import BackupStore
 
-log = logging.getLogger("adguard-dns-failover")
+log = logging.getLogger("dns-blockswitch")
 
 
 def block_payload(cfg: Config) -> dict:
@@ -247,7 +247,7 @@ def loop(cfg: Config, store: BackupStore) -> None:
     signal.signal(signal.SIGTERM, _handle)
     signal.signal(signal.SIGINT, _handle)
 
-    log.info("adguard-dns-failover %s", os.environ.get("APP_VERSION", "dev"))
+    log.info("dns-blockswitch %s", os.environ.get("APP_VERSION", "dev"))
     log.info("Mode: %s", "DRY-RUN (no changes will be made)" if cfg.dry_run else "live")
     log.info("Instances: %s", ", ".join(i.name for i in cfg.instances))
     log.info("Schedules: %s", " | ".join(cfg.cron_schedules))
@@ -296,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
 
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    parser = argparse.ArgumentParser(prog="adguard-dns-failover")
+    parser = argparse.ArgumentParser(prog="dns-blockswitch")
     parser.add_argument("command", nargs="?", default="daemon",
                         choices=["daemon", "run-once", "status", "restore", "test-telegram"])
     args = parser.parse_args(argv)
@@ -320,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         if not notifier.enabled:
             log.error("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID first")
             return 2
-        notifier.send("🤖 <b>adguard-dns-failover</b> conectado. Te avisaré cuando haya bloqueos de IPs 🚨")
+        notifier.send("🤖 <b>dns-blockswitch</b> conectado. Te avisaré cuando haya bloqueos de IPs 🚨")
         return 0
     if args.command == "status":
         return status_cmd(cfg, store)

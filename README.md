@@ -1,10 +1,12 @@
-# adguard-dns-failover
+# dns-blockswitch
 
 Cambia automáticamente los DNS de tus instancias de **AdGuard Home** y/o **Pi-hole v6** a unos DNS alternativos cuando se detectan bloqueos masivos de IPs (por ejemplo, de rangos de Cloudflare), y restaura tu configuración original cuando el bloqueo termina.
 
 Puedes usar el servicio DNS que quieras. Por defecto se usa [xdp.es](https://xdp.es), que devuelve IPs de Cloudflare no bloqueadas.
 
-> 🧪 **Pi-hole en beta.** La compatibilidad con Pi-hole v6 está en pruebas en la imagen `garanda21/adguard-dns-failover:pihole`. Si la pruebas, cuéntanos qué tal en un [issue](https://github.com/garanda21/adguard-dns-failover/issues). La guía está en [Instancias de Pi-hole](#instancias-de-pi-hole-v6-beta).
+> 📦 **Antes se llamaba `adguard-dns-failover`.** La imagen antigua `garanda21/adguard-dns-failover` se seguirá actualizando durante un tiempo, pero cambia tu compose a `garanda21/dns-blockswitch`; solo hay que cambiar la línea `image:`. Tu configuración y tus backups siguen valiendo.
+
+> 🧪 **Pi-hole en beta.** La compatibilidad con Pi-hole v6 está en pruebas en la imagen `garanda21/dns-blockswitch:pihole`. Si la pruebas, cuéntanos qué tal en un [issue](https://github.com/garanda21/dns-blockswitch/issues). La guía está en [Instancias de Pi-hole](#instancias-de-pi-hole-v6-beta).
 
 ## Cómo funciona
 
@@ -20,12 +22,12 @@ Si la consulta de bloqueos falla, no se toca nada. El backup nunca se sobrescrib
 
 ## Instalación rápida
 
-La imagen está publicada en Docker Hub ([`garanda21/adguard-dns-failover`](https://hub.docker.com/r/garanda21/adguard-dns-failover)) para `amd64` y `arm64` (Raspberry Pi incluida).
+La imagen está publicada en Docker Hub ([`garanda21/dns-blockswitch`](https://hub.docker.com/r/garanda21/dns-blockswitch)) para `amd64` y `arm64` (Raspberry Pi incluida).
 
 ```bash
-mkdir adguard-dns-failover && cd adguard-dns-failover
-curl -fsSLO https://raw.githubusercontent.com/garanda21/adguard-dns-failover/main/docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/garanda21/adguard-dns-failover/main/.env.example -o .env
+mkdir dns-blockswitch && cd dns-blockswitch
+curl -fsSLO https://raw.githubusercontent.com/garanda21/dns-blockswitch/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/garanda21/dns-blockswitch/main/.env.example -o .env
 # edita .env con tus instancias
 docker compose up -d
 docker compose logs -f
@@ -38,11 +40,11 @@ Etiquetas disponibles: `latest` (última versión estable), `X.Y.Z` / `vX.Y.Z` (
 **Para probar la beta de Pi-hole**, descarga los ficheros de la rama `feature/pihole-support` y usa la etiqueta `pihole`:
 
 ```bash
-mkdir adguard-dns-failover && cd adguard-dns-failover
-curl -fsSLO https://raw.githubusercontent.com/garanda21/adguard-dns-failover/feature/pihole-support/docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/garanda21/adguard-dns-failover/feature/pihole-support/.env.example -o .env
-sed -i.bak 's#adguard-dns-failover:latest#adguard-dns-failover:pihole#' docker-compose.yml
-# edita .env con tus instancias (empieza con DRY_RUN=true)
+mkdir dns-blockswitch && cd dns-blockswitch
+curl -fsSLO https://raw.githubusercontent.com/garanda21/dns-blockswitch/feature/pihole-support/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/garanda21/dns-blockswitch/feature/pihole-support/.env.example -o .env
+sed -i.bak 's#dns-blockswitch:latest#dns-blockswitch:pihole#' docker-compose.yml
+# edita .env con tus instancias
 docker compose up -d && docker compose logs -f
 ```
 
@@ -123,8 +125,8 @@ Si prefieres no usar `.env`, puedes poner todo en el compose:
 
 ```yaml
 services:
-  adguard-dns-failover:
-    image: garanda21/adguard-dns-failover:pihole
+  dns-blockswitch:
+    image: garanda21/dns-blockswitch:pihole
     container_name: pihole-dns-failover
     restart: unless-stopped
     environment:
@@ -134,7 +136,6 @@ services:
       PIHOLE_1_PASSWORD: "app-password"
       TELEGRAM_BOT_TOKEN: "123456:ABC-DEF..."
       TELEGRAM_CHAT_ID: "123456789"
-      DRY_RUN: "true"                             # quítalo cuando hayas comprobado que funciona
       # BLOCK_PIHOLE_UPSTREAMS: "85.208.114.51;51.170.52.10"
     volumes:
       - failover_data:/data
@@ -154,10 +155,10 @@ INFO Pi-hole #1 (https://192.168.1.10:8443): OK, writable (upstreams=['8.8.8.8',
 Si Telegram está configurado, al arrancar también recibes un resumen: "✅ operativo" con las instancias verificadas, o un aviso con el error de cada una que falle. Si algo falla, en el log sale `ERROR ... connection check failed:` con el motivo. También puedes comprobarlo en cualquier momento con:
 
 ```bash
-docker compose exec adguard-dns-failover python -m app status
+docker compose exec dns-blockswitch python -m app status
 ```
 
-Para simular un bloqueo, pon temporalmente `BLOCK_MIN_IPS=1` (basta con que un operador tenga una IP bloqueada), con `DRY_RUN=true` si no quieres cambios reales.
+Para simular un bloqueo, pon temporalmente `BLOCK_MIN_IPS=1` (basta con que un operador tenga una IP bloqueada) y vuelve a quitarlo después: al terminar el "bloqueo" se restauran tus DNS.
 
 #### Diferencias con AdGuard
 
@@ -187,7 +188,7 @@ TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 TELEGRAM_CHAT_ID=123456789        # varios separados por ';'
 ```
 
-Prueba la conexión con `docker compose exec adguard-dns-failover python -m app test-telegram`.
+Prueba la conexión con `docker compose exec dns-blockswitch python -m app test-telegram`.
 
 Se envía un mensaje:
 
@@ -283,10 +284,10 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 ## Comandos útiles
 
 ```bash
-docker compose exec adguard-dns-failover python -m app status     # estado del bloqueo e instancias
-docker compose exec adguard-dns-failover python -m app run-once   # forzar una comprobación
-docker compose exec adguard-dns-failover python -m app restore    # restaurar DNS originales ya
-docker compose exec adguard-dns-failover python -m app test-telegram  # mensaje de prueba
+docker compose exec dns-blockswitch python -m app status     # estado del bloqueo e instancias
+docker compose exec dns-blockswitch python -m app run-once   # forzar una comprobación
+docker compose exec dns-blockswitch python -m app restore    # restaurar DNS originales ya
+docker compose exec dns-blockswitch python -m app test-telegram  # mensaje de prueba
 ```
 
 Los backups se guardan en `./data/backups/`. Se llaman `instance_<n>.json` (AdGuard) e `instance_pihole_<n>.json` (Pi-hole). Tras restaurar, el último queda como `*.restored.json`.
