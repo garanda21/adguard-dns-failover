@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import requests
 
 from app.config import Instance
@@ -17,12 +19,15 @@ READ_ONLY_HINT = (
 )
 
 
+log = logging.getLogger(__name__)
+
+
 class PiHoleError(DnsServerError):
     pass
 
 
 class PiHoleClient:
-    """Use as a context manager so the API session is always released (seats are limited)."""
+    """Call logout() after login() so the API session is released (seats are limited)."""
 
     def __init__(self, instance: Instance, timeout: float = 15.0):
         self.instance = instance
@@ -32,13 +37,6 @@ class PiHoleClient:
         self.sid: str | None = None
         # True when logged in with an app password (needs app_sudo to change settings).
         self.app_session = False
-
-    def __enter__(self) -> "PiHoleClient":
-        self.login()
-        return self
-
-    def __exit__(self, *_exc) -> None:
-        self.logout()
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
         url = f"{self.instance.url}/api/{path}"
@@ -89,7 +87,8 @@ class PiHoleClient:
         try:
             data = self._request("GET", "config/dns/upstreams", params={"detailed": "true"}).json()
             flags = data["config"]["dns"]["upstreams"].get("flags") or {}
-        except (PiHoleError, KeyError, AttributeError, ValueError):
+        except (PiHoleError, KeyError, AttributeError, ValueError) as exc:
+            log.debug("Could not read dns.upstreams flags, assuming writable: %s", exc)
             return False
         return bool(flags.get("env_var"))
 

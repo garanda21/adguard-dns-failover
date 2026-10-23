@@ -361,3 +361,63 @@ def test_startup_message_can_be_disabled(tmp_path):
     pihole_mock({"upstreams": ["8.8.8.8"]})
     assert m.check_instances(cfg, TelegramNotifier("T", ["1"])) == []
     assert tg.call_count == 0
+
+
+@responses.activate
+def test_pihole_restart_failure_after_write_keeps_backup(tmp_path):
+    cfg = load_config(pihole_env(tmp_path))
+    store = BackupStore(cfg.data_dir)
+    current = {"upstreams": ["8.8.8.8"]}
+    pihole_mock(current)
+    responses.replace(responses.POST, f"{PH}/api/action/restartdns", status=500)
+    responses.add(responses.GET, API, json=payload(4))
+    # Config was written, so the switch counts as done and the backup must survive.
+    assert m.run_once(cfg, store) == 0
+    assert current["upstreams"] == cfg.block_pihole_upstreams
+    assert store.get("pihole_1")["dns"]["upstreams"] == ["8.8.8.8"]
+
+    responses.replace(responses.GET, API, json=payload(0))
+    assert m.run_once(cfg, store) == 0
+    assert current["upstreams"] == ["8.8.8.8"]
+
+
+@responses.activate
+def test_adguard_cache_clear_failure_after_write_keeps_backup(tmp_path):
+    import json
+
+    cfg = load_config(env(tmp_path))
+    store = BackupStore(cfg.data_dir)
+    current = {"upstream_dns": ["1.1.1.1"], "bootstrap_dns": ["9.9.9.9"]}
+
+    def dns_config(req):
+        current.update(json.loads(req.body))
+        return 200, {}, "OK"
+
+    responses.add_callback(responses.GET, f"{AG}/control/dns_info", callback=lambda r: (200, {}, json.dumps(current)))
+    responses.add_callback(responses.POST, f"{AG}/control/dns_config", callback=dns_config)
+    responses.add(responses.POST, f"{AG}/control/cache_clear", status=500)
+    responses.add(responses.GET, API, json=payload(4))
+    assert m.run_once(cfg, store) == 0
+    assert store.get("1")["dns"]["upstream_dns"] == ["1.1.1.1"]
+
+
+@responses.activate
+def test_mixed_notification_shows_upstreams_of_changed_kinds(tmp_path):
+    import json
+
+    from app.notifier import TelegramNotifier
+
+    cfg = load_config(env(tmp_path, PIHOLE_1_URL=PH, PIHOLE_1_PASSWORD="app-pass",
+                          TELEGRAM_BOT_TOKEN="T", TELEGRAM_CHAT_ID="1"))
+    store = BackupStore(cfg.data_dir)
+    # AdGuard is unreachable; only Pi-hole changes.
+    responses.add(responses.GET, f"{AG}/control/dns_info", status=500)
+    pihole_mock({"upstreams": ["8.8.8.8"]})
+    tg = responses.add(responses.POST, "https://api.telegram.org/botT/sendMessage", json={"ok": True})
+    responses.add(responses.GET, API, json=payload(4))
+    m.run_once(cfg, store, TelegramNotifier("T", ["1"]))
+    text = json.loads(tg.calls[0].request.body)["text"]
+    assert "85.208.114.51" in text and "dns-query" not in text
+
+    assert m.shown_upstreams(cfg, {"adguard", "pihole"}) == [
+        "https://dns.xdp.es/dns-query", "tls://dns.xdp.es", "85.208.114.51", "51.170.52.10"]

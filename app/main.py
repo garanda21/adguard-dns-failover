@@ -54,6 +54,14 @@ def _hosts(upstreams: list[str]) -> set[str]:
     return {_upstream_host(u.split("#", 1)[0]) for u in upstreams}
 
 
+def _flush_cache(flush, inst: Instance) -> None:
+    try:
+        flush()
+    except DnsServerError as exc:
+        log.warning("%s: DNS changed but cache flush failed (clients may need a few minutes): %s",
+                    inst.name, exc)
+
+
 class AdGuardBackend:
     """Backs up and switches upstream/bootstrap/fallback DNS of an AdGuard Home instance."""
 
@@ -81,7 +89,8 @@ class AdGuardBackend:
 
     def apply(self, dns: dict) -> None:
         self.client.set_dns_config(dns)
-        self.client.clear_cache()
+        # The DNS config is already changed: a failed cache flush must not undo the backup.
+        _flush_cache(self.client.clear_cache, self.client.instance)
 
 
 class PiHoleBackend:
@@ -103,6 +112,7 @@ class PiHoleBackend:
 
     def is_block_active(self, dns: dict) -> bool:
         current = [u for u in dns.get("upstreams") or [] if u.strip()]
+        # A subset also counts (e.g. only one xdp IP set by hand): restoring would change nothing.
         return bool(current) and _hosts(current) <= _hosts(self.cfg.block_pihole_upstreams)
 
     def ensure_writable(self) -> None:
@@ -116,7 +126,8 @@ class PiHoleBackend:
 
     def apply(self, dns: dict) -> None:
         self.client.set_upstreams(dns["upstreams"])
-        self.client.restart_dns()  # Restarting FTL also empties its DNS cache.
+        # Restarting the resolver empties its cache; the config is already changed if this fails.
+        _flush_cache(self.client.restart_dns, self.client.instance)
 
 
 def make_backend(cfg: Config, inst: Instance):
@@ -201,6 +212,13 @@ def check_instances(cfg: Config, notifier: TelegramNotifier | None = None) -> li
     return [label for label, _ in failed]
 
 
+def shown_upstreams(cfg: Config, kinds: set[str]) -> list[str]:
+    """Block upstreams of the server kinds that changed, without duplicates."""
+    upstreams = (cfg.block_upstreams if "adguard" in kinds else []) + \
+        (cfg.block_pihole_upstreams if "pihole" in kinds else [])
+    return list(dict.fromkeys(upstreams))
+
+
 def run_once(cfg: Config, store: BackupStore, notifier: TelegramNotifier | None = None) -> int:
     try:
         status = detector.check(cfg.api_url, cfg.block_threshold_pct, cfg.block_min_ips, cfg.http_timeout, cfg.isps)
@@ -215,20 +233,20 @@ def run_once(cfg: Config, store: BackupStore, notifier: TelegramNotifier | None 
              status.active, cfg.block_min_ips, cfg.block_threshold_pct, summary, status.last_update)
 
     changed: list[str] = []
+    changed_kinds: set[str] = set()
     failed: list[str] = []
     for inst in cfg.instances:
         try:
             if apply_block_dns(cfg, inst, store) if status.active else restore(cfg, inst, store):
                 changed.append(inst.label)
+                changed_kinds.add(inst.kind)
         except DnsServerError as exc:
             failed.append(inst.label)
             log.error("%s: %s", inst.name, exc)
 
     # Notify only on transitions (some instance changed) or on errors while switching.
     if notifier and (changed or failed) and not cfg.dry_run:
-        kinds = {i.kind for i in cfg.instances}
-        shown = cfg.block_upstreams if "adguard" in kinds else cfg.block_pihole_upstreams
-        notifier.send(build_message(status.active, status, changed, failed, shown))
+        notifier.send(build_message(status.active, status, changed, failed, shown_upstreams(cfg, changed_kinds)))
     return 1 if failed else 0
 
 
