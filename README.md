@@ -6,8 +6,6 @@ Puedes usar el servicio DNS que quieras. Por defecto se usa [xdp.es](https://xdp
 
 > 📦 **Antes se llamaba `adguard-dns-failover`.** La imagen antigua `garanda21/adguard-dns-failover` se seguirá actualizando durante un tiempo, pero cambia tu compose a `garanda21/dns-blockswitch`; solo hay que cambiar la línea `image:`. Tu configuración y tus backups siguen valiendo.
 
-> 🧪 **Pi-hole en beta.** La compatibilidad con Pi-hole v6 está en pruebas en la imagen `garanda21/dns-blockswitch:pihole`. Si la pruebas, cuéntanos qué tal en un [issue](https://github.com/garanda21/dns-blockswitch/issues). La guía está en [Instancias de Pi-hole](#instancias-de-pi-hole-v6-beta).
-
 ## Cómo funciona
 
 1. Según los cron configurados, consulta el estado de bloqueos en [hayahora.futbol](https://hayahora.futbol/estado/data.json).
@@ -35,18 +33,7 @@ docker compose logs -f
 
 Para actualizar: `docker compose pull && docker compose up -d`.
 
-Etiquetas disponibles: `latest` (última versión estable), `X.Y.Z` / `vX.Y.Z` (versión concreta), `development` (pre-releases) y `pihole` (beta con soporte para Pi-hole).
-
-**Para probar la beta de Pi-hole**, descarga los ficheros de la rama `feature/pihole-support` y usa la etiqueta `pihole`:
-
-```bash
-mkdir dns-blockswitch && cd dns-blockswitch
-curl -fsSLO https://raw.githubusercontent.com/garanda21/dns-blockswitch/feature/pihole-support/docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/garanda21/dns-blockswitch/feature/pihole-support/.env.example -o .env
-sed -i.bak 's#dns-blockswitch:latest#dns-blockswitch:pihole#' docker-compose.yml
-# edita .env con tus instancias
-docker compose up -d && docker compose logs -f
-```
+Etiquetas disponibles: `latest` (última versión estable), `X.Y.Z` / `vX.Y.Z` (versión concreta) y `development` (pre-releases).
 
 Si prefieres construir la imagen tú mismo, clona el repo, descomenta `build: .` en `docker-compose.yml` y ejecuta `docker compose up -d --build`.
 
@@ -69,7 +56,7 @@ ADGUARD_2_PASSWORD_FILE=/run/secrets/adguard_2_password   # alternativa con Dock
 
 La URL es la de la interfaz web (la misma con la que entras al panel).
 
-### Instancias de Pi-hole (v6, beta)
+### Instancias de Pi-hole (v6)
 
 Se pueden mezclar con las de AdGuard. Solo es compatible **Pi-hole v6**, porque la v5 no tiene API para cambiar los DNS.
 
@@ -126,7 +113,7 @@ Si prefieres no usar `.env`, puedes poner todo en el compose:
 ```yaml
 services:
   dns-blockswitch:
-    image: garanda21/dns-blockswitch:pihole
+    image: garanda21/dns-blockswitch:latest
     container_name: pihole-dns-failover
     restart: unless-stopped
     environment:
@@ -225,7 +212,7 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 | `ADGUARD_<n>_URL` | — | URL de cada instancia de AdGuard Home (hace falta al menos una instancia de AdGuard o Pi-hole) |
 | `ADGUARD_<n>_USER` / `_PASSWORD` | — | Credenciales. Admite `_USER_FILE` / `_PASSWORD_FILE` |
 | `ADGUARD_<n>_NAME` | host de la URL | Nombre en las notificaciones |
-| `PIHOLE_<n>_URL` | — | URL de cada instancia de Pi-hole v6 (beta) |
+| `PIHOLE_<n>_URL` | — | URL de cada instancia de Pi-hole v6 |
 | `PIHOLE_<n>_PASSWORD` | — | *App password* o contraseña principal. Admite `_PASSWORD_FILE`. Vacía si Pi-hole no tiene contraseña |
 | `PIHOLE_<n>_NAME` | host de la URL | Nombre en las notificaciones |
 | `ADGUARD_<n>_VERIFY_SSL` / `PIHOLE_<n>_VERIFY_SSL` | `true` | `false` para aceptar certificados autofirmados con `https://` |
