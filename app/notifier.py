@@ -53,17 +53,33 @@ def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: lis
     return "\n".join(parts)
 
 
-def build_check_message(failed: list[tuple[str, str]]) -> str:
+def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: bool = False) -> str:
+    """Startup summary: which instances are reachable and writable."""
     now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
-    parts = [
-        "⚠️🔌 <b>Problema de conexión con tus servidores DNS</b>",
-        "",
-        "Al arrancar no se ha podido verificar el acceso a estas instancias. "
-        "Si hay un bloqueo, no se podrán cambiar sus DNS:",
-        "",
-    ]
-    parts += [f"❌ <b>{html.escape(label)}</b>\n<code>{html.escape(error[:300])}</code>" for label, error in failed]
-    parts += ["", "Revisa la configuración y reinicia el contenedor.", "", f"🕒 {now}"]
+    if failed:
+        parts = [
+            "⚠️🔌 <b>Problema de conexión con tus servidores DNS</b>",
+            "",
+            "Al arrancar no se ha podido verificar el acceso a estas instancias. "
+            "Si hay un bloqueo, no se podrán cambiar sus DNS:",
+            "",
+        ]
+        parts += [f"❌ <b>{html.escape(label)}</b>\n<code>{html.escape(error[:300])}</code>" for label, error in failed]
+        if ok:
+            parts += ["", "✅ <b>Funcionan correctamente:</b>", _instance_lines(ok, "🟢")]
+        parts += ["", "Revisa la configuración y reinicia el contenedor."]
+    else:
+        parts = [
+            "🤖✅ <b>adguard-dns-failover operativo</b>",
+            "",
+            "Conexión verificada con tus servidores DNS:",
+            _instance_lines(ok, "🟢"),
+            "",
+            "Te avisaré cuando haya un bloqueo de IPs 🚨",
+        ]
+    if dry_run:
+        parts += ["", "🧪 <b>Modo prueba (DRY_RUN):</b> no se cambiará nada."]
+    parts += ["", f"🕒 {now}"]
     return "\n".join(parts)
 
 

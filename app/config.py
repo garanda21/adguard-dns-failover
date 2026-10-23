@@ -64,6 +64,7 @@ class Config:
     dry_run: bool = False
     telegram_bot_token: str | None = None
     telegram_chat_ids: list[str] = field(default_factory=list)
+    telegram_startup_message: bool = True
 
 
 def split_list(value: str | None) -> list[str]:
@@ -159,4 +160,5 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         dry_run=_bool(env.get("DRY_RUN"), False),
         telegram_bot_token=_secret(env, "TELEGRAM_BOT_TOKEN"),
         telegram_chat_ids=split_list(env.get("TELEGRAM_CHAT_ID")),
+        telegram_startup_message=_bool(env.get("TELEGRAM_STARTUP_MESSAGE"), True),
     )

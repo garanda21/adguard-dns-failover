@@ -338,12 +338,26 @@ def test_check_instances_ok_and_failures(tmp_path):
     pihole_mock(current)
     app_password_login(True)
     assert m.check_instances(cfg, notifier) == []
-    assert tg.call_count == 0
+    assert tg.call_count == 1  # startup "all good" summary
+    import json
+    assert "operativo" in json.loads(tg.calls[0].request.body)["text"]
     assert current["upstreams"] == ["8.8.8.8"]  # read-only check, nothing changed
 
     responses.replace(responses.GET, f"{PH}/api/config/webserver/api/app_sudo",
                       json={"config": {"webserver": {"api": {"app_sudo": False}}}})
     assert m.check_instances(cfg, notifier) == [PH.removeprefix("http://")]
     import json
-    text = json.loads(tg.calls[0].request.body)["text"]
+    text = json.loads(tg.calls[1].request.body)["text"]
     assert "Problema de conexión" in text and "app_sudo" in text
+
+
+@responses.activate
+def test_startup_message_can_be_disabled(tmp_path):
+    from app.notifier import TelegramNotifier
+
+    cfg = load_config(pihole_env(tmp_path, TELEGRAM_BOT_TOKEN="T", TELEGRAM_CHAT_ID="1",
+                                 TELEGRAM_STARTUP_MESSAGE="false"))
+    tg = responses.add(responses.POST, "https://api.telegram.org/botT/sendMessage", json={"ok": True})
+    pihole_mock({"upstreams": ["8.8.8.8"]})
+    assert m.check_instances(cfg, TelegramNotifier("T", ["1"])) == []
+    assert tg.call_count == 0

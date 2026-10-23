@@ -183,18 +183,21 @@ def restore(cfg: Config, inst: Instance, store: BackupStore) -> bool:
 
 def check_instances(cfg: Config, notifier: TelegramNotifier | None = None) -> list[str]:
     """Connect to every instance without changing anything; return labels that failed."""
+    ok: list[str] = []
     failed: list[tuple[str, str]] = []
     for inst in cfg.instances:
         try:
             with make_backend(cfg, inst) as backend:
                 dns = backend.current()
                 backend.ensure_writable()
+            ok.append(inst.label)
             log.info("%s: OK, writable (%s)", inst.name, _describe(dns))
         except DnsServerError as exc:
             failed.append((inst.label, str(exc)))
             log.error("%s: connection check failed: %s", inst.name, exc)
-    if failed and notifier:
-        notifier.send(build_check_message(failed))
+    # Errors are always reported; the "all good" summary can be turned off.
+    if notifier and (failed or cfg.telegram_startup_message):
+        notifier.send(build_check_message(ok, failed, cfg.dry_run))
     return [label for label, _ in failed]
 
 

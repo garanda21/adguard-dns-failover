@@ -151,7 +151,7 @@ Al arrancar, la app se conecta a cada instancia **sin cambiar nada** y comprueba
 INFO Pi-hole #1 (https://192.168.1.10:8443): OK, writable (upstreams=['8.8.8.8', '1.1.1.1'])
 ```
 
-Si algo falla, sale un `ERROR ... connection check failed:` con el motivo, y llega un aviso por Telegram (si está configurado). También puedes comprobarlo en cualquier momento con:
+Si Telegram está configurado, al arrancar también recibes un resumen: "✅ operativo" con las instancias verificadas, o un aviso con el error de cada una que falle. Si algo falla, en el log sale `ERROR ... connection check failed:` con el motivo. También puedes comprobarlo en cualquier momento con:
 
 ```bash
 docker compose exec adguard-dns-failover python -m app status
@@ -189,7 +189,11 @@ TELEGRAM_CHAT_ID=123456789        # varios separados por ';'
 
 Prueba la conexión con `docker compose exec adguard-dns-failover python -m app test-telegram`.
 
-Solo se envía mensaje cuando cambia el estado (empieza o acaba el bloqueo) o si alguna instancia falla al cambiar.
+Se envía un mensaje:
+
+- **al arrancar**, con el resultado de la comprobación de las instancias (desactívalo con `TELEGRAM_STARTUP_MESSAGE=false`; los errores se avisan siempre);
+- **cuando empieza o acaba un bloqueo**;
+- **si alguna instancia falla** al cambiar los DNS.
 
 ### Operadores
 
@@ -226,6 +230,7 @@ El bootstrap solo sirve para resolver el nombre de los upstream (por ejemplo, `d
 | `ADGUARD_<n>_VERIFY_SSL` / `PIHOLE_<n>_VERIFY_SSL` | `true` | `false` para aceptar certificados autofirmados con `https://` |
 | `TELEGRAM_BOT_TOKEN` | — | Token del bot (admite `_FILE`) |
 | `TELEGRAM_CHAT_ID` | — | Chat id(s) separados por `;` |
+| `TELEGRAM_STARTUP_MESSAGE` | `true` | Enviar el resumen "operativo" al arrancar. Los errores de conexión se avisan siempre |
 | `CRON_SCHEDULES` | `*/30 * * * *` | Crons separados por `;` |
 | `RUN_ON_START` | `true` | Comprobar al arrancar el contenedor |
 | `TZ` | `Europe/Madrid` | Zona horaria de los cron |
