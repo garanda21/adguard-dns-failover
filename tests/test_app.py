@@ -421,3 +421,20 @@ def test_mixed_notification_shows_upstreams_of_changed_kinds(tmp_path):
 
     assert m.shown_upstreams(cfg, {"adguard", "pihole"}) == [
         "https://dns.xdp.es/dns-query", "tls://dns.xdp.es", "85.208.114.51", "51.170.52.10"]
+
+
+def test_describe_cron_in_spanish():
+    from app.schedule import describe_cron
+
+    assert describe_cron("0 */4 * * 1-5") == "cada 4 horas, de lunes a viernes"
+    assert describe_cron("0 */2 * * 6,0") == "cada 2 horas, sólo el sábado y domingo"
+    assert describe_cron("*/30 * * * *") == "cada 30 minutos"
+    assert describe_cron("not a cron") == "not a cron"
+
+
+def test_startup_message_includes_schedule():
+    from app.notifier import build_check_message
+
+    msg = build_check_message(["NAS"], [], False, ["0 */4 * * 1-5", "0 */2 * * 6,0"])
+    assert "Comprobaré los bloqueos" in msg and "de lunes a viernes" in msg and "Próxima comprobación" in msg
+    assert "Comprobaré" not in build_check_message([], [("NAS", "err")], False, ["*/30 * * * *"])

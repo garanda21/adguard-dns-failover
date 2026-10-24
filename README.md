@@ -179,7 +179,7 @@ Prueba la conexión con `docker compose exec dns-blockswitch python -m app test-
 
 Se envía un mensaje:
 
-- **al arrancar**, con el resultado de la comprobación de las instancias (desactívalo con `TELEGRAM_STARTUP_MESSAGE=false`; los errores se avisan siempre);
+- **al arrancar**, con el resultado de la comprobación de las instancias y cuándo se comprobarán los bloqueos (según `CRON_SCHEDULES`) (desactívalo con `TELEGRAM_STARTUP_MESSAGE=false`; los errores se avisan siempre);
 - **cuando empieza o acaba un bloqueo**;
 - **si alguna instancia falla** al cambiar los DNS.
 

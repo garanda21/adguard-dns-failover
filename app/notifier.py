@@ -26,7 +26,6 @@ def _instance_lines(names: list[str], icon: str) -> str:
 
 def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: list[str],
                   upstreams: list[str]) -> str:
-    now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
     if blocked:
         parts = ["🚨🛡️ <b>¡Bloqueo de IPs detectado!</b> 🛡️🚨", ""]
         if ok:
@@ -49,13 +48,23 @@ def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: lis
             parts.append("⚠️ <b>No se han podido restaurar los DNS originales.</b> Revisa los logs.")
     if failed:
         parts += ["", "⚠️ <b>Errores en:</b>", _instance_lines(failed, "❌")]
-    parts += ["", f"🕒 {now}"]
     return "\n".join(parts)
 
 
-def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: bool = False) -> str:
-    """Startup summary: which instances are reachable and writable."""
-    now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
+def _schedule_lines(crons: list[str]) -> list[str]:
+    from app.schedule import describe_cron, next_check
+
+    if not crons:
+        return []
+    lines = ["", "⏱️ <b>Comprobaré los bloqueos:</b>"]
+    lines += [f"• {html.escape(describe_cron(expr))}" for expr in crons]
+    lines.append(f"Próxima comprobación: {next_check(crons, datetime.now().astimezone()).strftime('%d/%m %H:%M')}")
+    return lines
+
+
+def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: bool = False,
+                        crons: list[str] | None = None) -> str:
+    """Startup summary: which instances are reachable and writable, and when checks run."""
     if failed:
         parts = [
             "⚠️🔌 <b>Problema de conexión con tus servidores DNS</b>",
@@ -77,9 +86,9 @@ def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: b
             "",
             "Te avisaré cuando haya un bloqueo de IPs 🚨",
         ]
+        parts += _schedule_lines(crons or [])
     if dry_run:
         parts += ["", "🧪 <b>Modo prueba (DRY_RUN):</b> no se cambiará nada."]
-    parts += ["", f"🕒 {now}"]
     return "\n".join(parts)
 
 

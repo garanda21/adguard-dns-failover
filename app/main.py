@@ -208,7 +208,7 @@ def check_instances(cfg: Config, notifier: TelegramNotifier | None = None) -> li
             log.error("%s: connection check failed: %s", inst.name, exc)
     # Errors are always reported; the "all good" summary can be turned off.
     if notifier and (failed or cfg.telegram_startup_message):
-        notifier.send(build_check_message(ok, failed, cfg.dry_run))
+        notifier.send(build_check_message(ok, failed, cfg.dry_run, cfg.cron_schedules))
     return [label for label, _ in failed]
 
 
