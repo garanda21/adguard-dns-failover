@@ -53,8 +53,20 @@ def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: lis
     return "\n".join(parts)
 
 
-def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: bool = False) -> str:
-    """Startup summary: which instances are reachable and writable."""
+def _schedule_lines(crons: list[str]) -> list[str]:
+    from app.schedule import describe_cron, next_check
+
+    if not crons:
+        return []
+    lines = ["", "⏱️ <b>Comprobaré los bloqueos:</b>"]
+    lines += [f"• {html.escape(describe_cron(expr))}" for expr in crons]
+    lines.append(f"Próxima comprobación: {next_check(crons, datetime.now().astimezone()).strftime('%d/%m %H:%M')}")
+    return lines
+
+
+def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: bool = False,
+                        crons: list[str] | None = None) -> str:
+    """Startup summary: which instances are reachable and writable, and when checks run."""
     now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
     if failed:
         parts = [
@@ -77,6 +89,7 @@ def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: b
             "",
             "Te avisaré cuando haya un bloqueo de IPs 🚨",
         ]
+        parts += _schedule_lines(crons or [])
     if dry_run:
         parts += ["", "🧪 <b>Modo prueba (DRY_RUN):</b> no se cambiará nada."]
     parts += ["", f"🕒 {now}"]
