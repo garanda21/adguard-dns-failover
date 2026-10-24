@@ -26,7 +26,6 @@ def _instance_lines(names: list[str], icon: str) -> str:
 
 def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: list[str],
                   upstreams: list[str]) -> str:
-    now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
     if blocked:
         parts = ["🚨🛡️ <b>¡Bloqueo de IPs detectado!</b> 🛡️🚨", ""]
         if ok:
@@ -49,7 +48,6 @@ def build_message(blocked: bool, status: BlockStatus, ok: list[str], failed: lis
             parts.append("⚠️ <b>No se han podido restaurar los DNS originales.</b> Revisa los logs.")
     if failed:
         parts += ["", "⚠️ <b>Errores en:</b>", _instance_lines(failed, "❌")]
-    parts += ["", f"🕒 {now}"]
     return "\n".join(parts)
 
 
@@ -67,7 +65,6 @@ def _schedule_lines(crons: list[str]) -> list[str]:
 def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: bool = False,
                         crons: list[str] | None = None) -> str:
     """Startup summary: which instances are reachable and writable, and when checks run."""
-    now = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
     if failed:
         parts = [
             "⚠️🔌 <b>Problema de conexión con tus servidores DNS</b>",
@@ -92,7 +89,6 @@ def build_check_message(ok: list[str], failed: list[tuple[str, str]], dry_run: b
         parts += _schedule_lines(crons or [])
     if dry_run:
         parts += ["", "🧪 <b>Modo prueba (DRY_RUN):</b> no se cambiará nada."]
-    parts += ["", f"🕒 {now}"]
     return "\n".join(parts)
 
 
